@@ -1,25 +1,24 @@
 # iOS Storage Forensics
 
-Estudo de caso reproduzível sobre a investigação de um crescimento anormal de
-**Dados do Sistema** em um iPhone, usando Linux, conexão USB e acesso autorizado
-ao próprio aparelho.
+Neste repositório eu documento como investiguei um crescimento anormal de
+**Dados do Sistema** no meu iPhone usando Linux, conexão USB e acesso SSH
+autorizado por mim.
 
-O objetivo deste repositório não é oferecer um “limpador mágico”. Ele mostra
-como medir o armazenamento, localizar a causa real, validar o alvo e só então
-remover um cache comprovadamente descartado.
+Meu objetivo não é oferecer um “limpador mágico”. Eu quero mostrar como medi o
+armazenamento, localizei a causa real, validei o alvo e só então removi um cache
+comprovadamente descartado.
 
-## Como o caso foi conduzido
+## Como conduzi a investigação
 
-A investigação foi realizada de forma colaborativa entre o proprietário do
-aparelho e o **Codex, da OpenAI**. O proprietário autorizou o acesso, manteve o
-controle físico do dispositivo e executou as etapas exigidas no iPhone. O Codex
-conduziu as medições pelo terminal, delimitou o alvo, executou a limpeza e
-validou o resultado.
+Eu realizei a investigação no meu próprio aparelho com o apoio do **Codex, da
+OpenAI**. Mantive o controle físico do iPhone e autorizei cada etapa necessária.
+O Codex conduziu as medições pelo terminal, ajudou a delimitar o alvo, executou
+a limpeza autorizada e validou comigo o resultado.
 
-Este relato separa fatos observados de recomendações gerais e omite todas as
-credenciais e identificações pessoais da sessão original.
+Neste relato eu separo os fatos que observamos das recomendações gerais. Também
+retirei todas as credenciais e identificações pessoais da sessão original.
 
-## Resultado do caso
+## Resultado que obtive
 
 | Etapa | Antes | Depois |
 | --- | ---: | ---: |
@@ -27,15 +26,15 @@ credenciais e identificações pessoais da sessão original.
 | `~/Library/Caches` do usuário móvel | aproximadamente 17 GB | aproximadamente 1,1 GB |
 | Cache descartado identificado | aproximadamente 16 GB | 0 |
 
-A causa foi a presença de **242 cópias órfãs** de
+Eu encontrei **242 cópias órfãs** de
 `com.google.photos.mdd.downloads` dentro da área
 `com.apple.CacheDeleteAppContainerCaches.discardedCaches`. Os arquivos estavam
 marcados como imutáveis, impedindo que o processo normal de limpeza do iOS os
 excluísse.
 
-Nenhuma foto, conversa ou pasta de dados ativa de aplicativo foi removida.
+Eu não removi fotos, conversas nem pastas de dados ativas de aplicativos.
 
-## Ambiente observado
+## Ambiente que usei
 
 - iPhone XR;
 - iOS 18.7;
@@ -43,32 +42,33 @@ Nenhuma foto, conversa ou pasta de dados ativa de aplicativo foi removida.
 - OpenSSH do Procursus;
 - Linux com `libimobiledevice`, `iproxy` e OpenSSH Client.
 
-Este é o registro de **um caso específico**. Caminhos, permissões e comportamento
-podem mudar entre versões do iOS. Não execute a limpeza em outro aparelho sem
-refazer todo o diagnóstico.
+Este repositório registra **o meu caso específico**. Eu não presumo que a mesma
+causa exista em outros aparelhos: caminhos, permissões e comportamento podem
+mudar entre versões do iOS. Por isso, recomendo refazer todo o diagnóstico antes
+de tentar a limpeza em outro dispositivo.
 
-## Fluxo de investigação
+## Meu fluxo de investigação
 
-### 1. Encaminhar o SSH exclusivamente pelo USB
+### 1. Como encaminhei o SSH exclusivamente pelo USB
 
-No computador Linux:
+No meu computador Linux, executei:
 
 ```sh
 iproxy 2222 22
 ```
 
-Em outro terminal:
+Em outro terminal, conectei ao iPhone:
 
 ```sh
 ssh -p 2222 mobile@127.0.0.1
 ```
 
-Use uma senha temporária forte e diferente da senha do iPhone e da conta Apple.
-Não exponha o SSH na internet.
+Eu usei uma senha temporária forte e diferente da senha do iPhone e da conta
+Apple. Também mantive o SSH restrito ao encaminhamento local por USB.
 
-### 2. Medir antes de remover
+### 2. Como medi antes de remover
 
-No iPhone, pela sessão SSH:
+No iPhone, pela sessão SSH, executei:
 
 ```sh
 df -h
@@ -77,7 +77,7 @@ sudo du -x -h -d 1 /private/var/mobile/Library 2>/dev/null | sort -h
 sudo du -x -h -d 1 /private/var/mobile/Library/Caches 2>/dev/null | sort -h
 ```
 
-O encadeamento revelou:
+Esse encadeamento me mostrou:
 
 ```text
 /private/var/mobile                         ~35 GB
@@ -87,10 +87,10 @@ O encadeamento revelou:
             └── ...discardedCaches          ~16 GB
 ```
 
-### 3. Confirmar o conteúdo
+### 3. Como confirmei o conteúdo
 
-Antes da limpeza, foram contadas as pastas descartadas e inspecionados seus
-nomes internos. Todas apontavam para o mesmo cache do Google Fotos:
+Antes da limpeza, eu contei as pastas descartadas e inspecionei seus nomes
+internos. Todas apontavam para o mesmo cache do Google Fotos:
 
 ```sh
 target='/private/var/mobile/Library/Caches/com.apple.cache_delete/com.apple.CacheDeleteAppContainerCaches.discardedCaches'
@@ -99,27 +99,29 @@ sudo find "$target" -mindepth 1 -maxdepth 1 -type d | wc -l
 sudo find "$target" -mindepth 2 -maxdepth 2 -type d -print
 ```
 
-O Google Fotos já não estava instalado. Portanto, eram caches órfãos que o
-próprio iOS havia movido para sua área de descarte, mas não conseguira eliminar.
+Eu confirmei que o Google Fotos já não estava instalado. Concluí, então, que
+eram caches órfãos que o próprio iOS havia movido para sua área de descarte, mas
+não conseguira eliminar.
 
-### 4. Remover somente o alvo validado
+### 4. Como removi somente o alvo validado
 
-O script [cleanup-discarded-google-photos-cache.sh](scripts/cleanup-discarded-google-photos-cache.sh)
-faz todas as verificações novamente. Sem argumentos, ele opera em **modo de
-simulação** e não altera nada:
+Eu transformei o procedimento no script
+[cleanup-discarded-google-photos-cache.sh](scripts/cleanup-discarded-google-photos-cache.sh).
+Ele repete todas as verificações e, sem argumentos, opera em **modo de
+simulação**, sem alterar nada:
 
 ```sh
 sudo /var/jb/bin/sh scripts/cleanup-discarded-google-photos-cache.sh
 ```
 
-Para efetivar a limpeza, é necessário passar `--apply` e confirmar o texto
+Para efetivar a limpeza, eu preciso passar `--apply` e confirmar o texto
 solicitado:
 
 ```sh
 sudo /var/jb/bin/sh scripts/cleanup-discarded-google-photos-cache.sh --apply
 ```
 
-O script:
+No meu procedimento, o script:
 
 1. confere o caminho absoluto;
 2. recusa conteúdos que não correspondam ao cache documentado;
@@ -128,29 +130,29 @@ O script:
 5. apaga o conteúdo, preservando o diretório de descarte;
 6. mede novamente o tamanho e o espaço livre.
 
-## Diagnóstico sem limpeza
+## Como faço o diagnóstico sem limpeza
 
-O script [inspect-ios-storage.sh](scripts/inspect-ios-storage.sh) produz um mapa
-das principais áreas do armazenamento sem modificar arquivos:
+Eu uso o script [inspect-ios-storage.sh](scripts/inspect-ios-storage.sh) para
+produzir um mapa das principais áreas do armazenamento sem modificar arquivos:
 
 ```sh
 sudo /var/jb/bin/sh scripts/inspect-ios-storage.sh
 ```
 
-## Cache adicional observado
+## Cache adicional que encontrei
 
-Também foi encontrado um arquivo esparso de aproximadamente 1,5 GB de uso físico
+Eu também encontrei um arquivo esparso com aproximadamente 1,5 GB de uso físico
 em:
 
 ```text
 /private/var/root/Library/Caches/com.apple.coresymbolicationd/<build-do-iOS>
 ```
 
-Ele era um cache reconstruível de simbolização. Sua remoção não foi automatizada
-neste repositório porque não fazia parte da falha principal e pode voltar a ser
-criado pelo sistema.
+Identifiquei esse arquivo como um cache reconstruível de simbolização. Eu não
+automatizei sua remoção neste repositório porque ele não fazia parte da falha
+principal e pode voltar a ser criado pelo sistema.
 
-## O que não deve ser apagado manualmente
+## O que eu não apaguei manualmente
 
 - `/private/var/MobileAsset`;
 - bancos de dados do sistema;
@@ -159,25 +161,26 @@ criado pelo sistema.
 - o diretório inteiro `/private/var/mobile/Library/Caches`;
 - qualquer caminho que não tenha sido previamente medido e identificado.
 
-“Dados do Sistema” nunca chegará a zero. Essa categoria também inclui vozes da
+Eu não tento zerar “Dados do Sistema”. Essa categoria também inclui vozes da
 Siri, dicionários, modelos de linguagem, índices, logs e caches legítimos.
 
-## Encerramento seguro
+## Como encerrei o acesso com segurança
 
-Após o diagnóstico:
+Após o diagnóstico, eu:
 
-1. altere a senha do usuário `mobile` para uma senha privada;
-2. remova o OpenSSH Server se não precisar mais dele;
-3. encerre o `iproxy`;
-4. reinicie o espaço de usuário;
-5. aguarde o iOS recalcular a tela de armazenamento.
+1. alterei a senha do usuário `mobile` para uma senha privada;
+2. removi o OpenSSH Server quando não precisei mais dele;
+3. encerrei o `iproxy`;
+4. reiniciei o espaço de usuário;
+5. aguardei o iOS recalcular a tela de armazenamento.
 
-## Aviso
+## Responsabilidade
 
-Este material é educacional e pressupõe que você é proprietário do aparelho ou
-possui autorização expressa para administrá-lo. Uma exclusão incorreta pode
-causar perda de dados ou tornar o sistema instável. Faça backup antes de qualquer
-alteração e use o modo de simulação.
+Eu publico este material com finalidade educacional porque o aparelho analisado
+é meu. Não recomendo executar o procedimento em aparelhos de
+terceiros sem autorização expressa. Uma exclusão incorreta pode causar perda de
+dados ou tornar o sistema instável; por isso, eu mantenho o modo de simulação
+como padrão e recomendo fazer backup antes de qualquer alteração.
 
 ## Licença
 
