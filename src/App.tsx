@@ -6,13 +6,6 @@ import type { CleanupResult, DeepScanReport, DeviceSnapshot, PlatformStatus, Tec
 
 type Phase = "connect" | "device" | "deep" | "review";
 
-const steps: { id: Phase; label: string; short: string }[] = [
-  { id: "connect", label: "Preparar", short: "1" },
-  { id: "device", label: "Identificar", short: "2" },
-  { id: "deep", label: "Investigar", short: "3" },
-  { id: "review", label: "Documentar", short: "4" },
-];
-
 const errorText = (error: unknown) =>
   error instanceof Error ? error.message : typeof error === "string" ? error : "Ocorreu um erro inesperado.";
 
@@ -30,17 +23,19 @@ function App() {
   const [password, setPassword] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmation, setConfirmation] = useState("");
-  const [showTechnical, setShowTechnical] = useState(false);
   const [reportMessage, setReportMessage] = useState<string>();
 
   useEffect(() => {
-    if (!demoRequested) {
-      platformStatus().then(setPlatform).catch((value) => setError(errorText(value)));
-    }
+    if (!demoRequested) platformStatus().then(setPlatform).catch((value) => setError(errorText(value)));
   }, []);
 
-  const activeIndex = steps.findIndex((item) => item.id === phase);
   const maxStorage = useMemo(() => Math.max(...(deep?.storage.map((item) => item.bytes) ?? [1])), [deep]);
+
+  function jumpTo(next: Phase) {
+    setPhase(next);
+    const target = document.getElementById(next);
+    if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   async function handleUsbScan() {
     setBusy("Lendo o aparelho pela conexão USB…");
@@ -49,6 +44,7 @@ function App() {
       const result = await scanUsbDevice();
       setDevice(result);
       setPhase("device");
+      requestAnimationFrame(() => document.getElementById("device")?.scrollIntoView({ behavior: "smooth" }));
     } catch (value) {
       setError(errorText(value));
     } finally {
@@ -61,7 +57,7 @@ function App() {
     setDevice(demoDevice);
     setDeep({ ...demoDeepScan, scannedAt: new Date().toISOString() });
     setCleanup(undefined);
-    setPhase("review");
+    setPhase("connect");
     setError(undefined);
     requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
   }
@@ -72,8 +68,7 @@ function App() {
     setBusy("Medindo o armazenamento sem alterar arquivos…");
     setError(undefined);
     try {
-      const result = await scanDeep(password);
-      setDeep(result);
+      setDeep(await scanDeep(password));
       setPhase("deep");
       setSshOpen(false);
     } catch (value) {
@@ -128,12 +123,11 @@ function App() {
       cleanup,
       privacy: "Nome, UDID, serial, conta Apple e credenciais não são incluídos.",
     };
-    const json = JSON.stringify(report, null, 2);
     setError(undefined);
     try {
+      const json = JSON.stringify(report, null, 2);
       if (isDesktop()) {
-        const path = await saveReport(json);
-        setReportMessage(`Relatório salvo em ${path}`);
+        setReportMessage(`Relatório salvo em ${await saveReport(json)}`);
       } else {
         const blob = new Blob([json], { type: "application/json" });
         const href = URL.createObjectURL(blob);
@@ -151,172 +145,97 @@ function App() {
   }
 
   return (
-    <div className="app-shell">
-      <header className="topbar">
-        <div className="brand-mark" aria-hidden="true"><span /></div>
-        <div className="brand-copy">
-          <strong>iOS Storage Forensics</strong>
-          <span>Estação técnica</span>
+    <div className="application">
+      <header className="appbar">
+        <div className="app-identity">
+          <span className="app-icon" aria-hidden="true"><i /></span>
+          <div><strong>iOS Storage Forensics</strong><small>Ferramenta de diagnóstico local</small></div>
         </div>
-        <div className="topbar-spacer" />
-        <span className={`runtime-badge ${isDesktop() ? "live" : "demo"}`}>
-          <i /> {isDesktop() ? "Aplicativo local" : "Prévia no navegador"}
-        </span>
-        <button className="quiet-button" onClick={handleDemo}>Abrir demonstração</button>
+        <div className="appbar-actions">
+          <span className={`environment ${isDesktop() ? "local" : "preview"}`}><i />{isDesktop() ? "Aplicativo local" : "Prévia web"}</span>
+          <button className="button text-button" onClick={handleDemo}>Carregar exemplo</button>
+        </div>
       </header>
 
-      <main className="workspace">
-        <nav className="stepper" aria-label="Etapas do atendimento">
-          {steps.map((step, index) => (
-            <div className={`step ${index <= activeIndex ? "active" : ""}`} key={step.id}>
-              <span>{index < activeIndex ? "✓" : step.short}</span>
-              <small>{step.label}</small>
-            </div>
-          ))}
-        </nav>
+      <div className="app-layout">
+        <aside className="navigation">
+          <div className="nav-heading">Atendimento</div>
+          <nav aria-label="Etapas do diagnóstico">
+            <NavItem number="1" label="Conexão" shortLabel="Conexão" state={device ? "done" : phase === "connect" ? "active" : "idle"} onClick={() => jumpTo("connect")} />
+            <NavItem number="2" label="Aparelho" shortLabel="Aparelho" state={phase === "device" ? "active" : device ? "done" : "idle"} disabled={!device} onClick={() => jumpTo("device")} />
+            <NavItem number="3" label="Armazenamento" shortLabel="Espaço" state={phase === "deep" ? "active" : deep ? "done" : "idle"} disabled={!device} onClick={() => jumpTo("deep")} />
+            <NavItem number="4" label="Relatório" shortLabel="Relatório" state={phase === "review" ? "active" : cleanup ? "done" : "idle"} disabled={!device} onClick={() => jumpTo("review")} />
+          </nav>
+          <div className="nav-footer"><span>Privacidade</span><p>O arquivo e as credenciais não são enviados para servidores.</p></div>
+        </aside>
 
-        <section className="intro-row">
-          <div>
-            <p className="eyebrow">ATENDIMENTO LOCAL · DADOS NÃO ENVIADOS</p>
-            <h1>Descubra o que ocupa espaço antes de apagar.</h1>
-            <p>Conecte o iPhone, registre as medições e trate somente achados que o aplicativo conseguir validar.</p>
+        <main className="work-area">
+          <div className="page-title">
+            <div><h1>Diagnóstico do aparelho</h1><p>Identifique o uso do armazenamento e registre somente alterações autorizadas.</p></div>
+            <span className={`session-state ${device ? "running" : "new"}`}>{device ? "Sessão em andamento" : "Nova sessão"}</span>
           </div>
-          <div className="session-number">
-            <span>SESSÃO</span>
-            <strong>{device ? "EM ANÁLISE" : "NOVA"}</strong>
-          </div>
-        </section>
 
-        {error && <div className="alert error" role="alert"><strong>Não foi possível continuar.</strong><span>{error}</span><button onClick={() => setError(undefined)}>×</button></div>}
-        {busy && <div className="activity"><span className="spinner" /><div><strong>{busy}</strong><small>Não desconecte o cabo durante esta etapa.</small></div></div>}
+          {error && <div className="message error" role="alert"><div><strong>Não foi possível continuar</strong><span>{error}</span></div><button aria-label="Fechar aviso" onClick={() => setError(undefined)}>×</button></div>}
+          {busy && <div className="message progress" role="status"><span className="spinner" /><div><strong>{busy}</strong><span>Não desconecte o cabo durante esta etapa.</span></div></div>}
 
-        <div className="content-grid">
-          <section className="main-column">
-            <article className="panel connection-panel">
-              <div className="panel-heading">
-                <div><span className="section-index">01</span><div><h2>Conexão e autorização</h2><p>O diagnóstico padrão funciona sem jailbreak.</p></div></div>
-                <StatusPill ok={Boolean(device?.connected)} label={device?.connected ? "Conectado" : "Aguardando"} />
+          <section className="workspace-section" id="connect">
+            <SectionHeader number="1" title="Conexão" description="Conecte, desbloqueie e autorize o computador." status={device ? "Conectado" : "Aguardando"} ok={Boolean(device)} />
+            {!device ? <ConnectionEmpty onScan={handleUsbScan} busy={Boolean(busy)} /> : <ConnectedSummary device={device} onScan={handleUsbScan} busy={Boolean(busy)} />}
+            {platform && <Requirements platform={platform} />}
+          </section>
+
+          <section className="workspace-section" id="device">
+            <SectionHeader number="2" title="Aparelho" description="Informações coletadas pela leitura USB padrão." status={device ? "Identificado" : "Pendente"} ok={Boolean(device)} />
+            {device ? <DeviceOverview device={device} /> : <EmptyRow>Conclua a conexão para identificar o aparelho.</EmptyRow>}
+          </section>
+
+          <section className="workspace-section" id="deep">
+            <SectionHeader number="3" title="Armazenamento" description="A leitura profunda mede os diretórios sem alterar arquivos." status={deep ? "Analisado" : "Pendente"} ok={Boolean(deep)} />
+            {!deep ? (
+              <div className="action-row">
+                <div><strong>Leitura avançada pelo cabo</strong><p>Requer jailbreak rootless, OpenSSH ativo e a senha temporária do usuário <code>mobile</code>.</p></div>
+                <button className="button secondary-button" disabled={!device || Boolean(busy)} onClick={() => setSshOpen(true)}>Configurar acesso</button>
               </div>
-
-              {!device ? (
-                <div className="connect-empty">
-                  <div className="cable-illustration"><span className="phone" /><span className="cable" /><span className="usb">USB</span></div>
-                  <div>
-                    <h3>Conecte e desbloqueie o iPhone</h3>
-                    <ol>
-                      <li>Use um cabo de dados e desbloqueie o aparelho.</li>
-                      <li>Toque em <b>Confiar</b> quando o iPhone perguntar.</li>
-                      <li>Clique abaixo para fazer uma leitura segura.</li>
-                    </ol>
-                    <button className="primary-button" onClick={handleUsbScan} disabled={Boolean(busy)}>Detectar aparelho</button>
-                  </div>
-                </div>
-              ) : (
-                <DeviceCard device={device} />
-              )}
-
-              {platform && (
-                <details className="requirements">
-                  <summary>Verificar componentes do computador</summary>
-                  <div className="tool-grid">
-                    {platform.tools.map((tool) => (
-                      <div className="tool-item" key={tool.id}><span className={tool.available ? "tool-ok" : "tool-missing"}>{tool.available ? "✓" : "!"}</span><div><strong>{tool.label}</strong><small>{tool.detail}</small></div></div>
-                    ))}
-                  </div>
-                  <p>{platform.driverHint}</p>
-                </details>
-              )}
-            </article>
-
-            <article className="panel">
-              <div className="panel-heading">
-                <div><span className="section-index">02</span><div><h2>Análise de armazenamento</h2><p>O modo profundo apenas mede até você autorizar uma limpeza.</p></div></div>
-                <StatusPill ok={Boolean(deep)} label={deep ? "Concluída" : "Não iniciada"} />
-              </div>
-
-              {!deep ? (
-                <div className="analysis-choice">
-                  <div>
-                    <span className="mode-label">LEITURA AVANÇADA</span>
-                    <h3>Investigar o sistema de arquivos</h3>
-                    <p>Requer jailbreak rootless, OpenSSH ativo e uma senha temporária do usuário <code>mobile</code>.</p>
-                  </div>
-                  <button className="secondary-button" disabled={!device || Boolean(busy)} onClick={() => setSshOpen(true)}>Configurar acesso profundo</button>
-                </div>
-              ) : (
-                <DeepResults report={deep} maxStorage={maxStorage} />
-              )}
-            </article>
-
-            {deep && (
-              <article className={`panel finding ${deep.discardedCache.status}`}>
-                <div className="finding-top">
-                  <div><span className="mode-label">ACHADO VALIDADO</span><h2>Cache de descarte do iOS</h2></div>
-                  <span className="finding-severity">{severityLabel(deep.discardedCache.status)}</span>
-                </div>
-                <div className="finding-number"><strong>{formatBytes(deep.discardedCache.bytes)}</strong><span>em {deep.discardedCache.directoryCount} conjuntos descartados</span></div>
-                <p>{deep.discardedCache.reason}</p>
-                <details className="technical-details" open={showTechnical} onToggle={(event) => setShowTechnical(event.currentTarget.open)}>
-                  <summary>Ver evidências técnicas</summary>
-                  <code>{deep.discardedCache.path}</code>
-                  {Object.entries(deep.discardedCache.identifiers).map(([name, count]) => <div className="identifier" key={name}><span>{name}</span><b>{count}×</b></div>)}
-                </details>
-                <div className="finding-actions">
-                  <div><strong>Nada será apagado sem uma segunda validação.</strong><small>A operação é recusada se surgir qualquer conteúdo diferente do caso documentado.</small></div>
-                  <button className="danger-button" disabled={!deep.discardedCache.cleanupEligible || Boolean(cleanup)} onClick={() => setConfirmOpen(true)}>{cleanup ? "Limpeza registrada" : "Revisar limpeza"}</button>
-                </div>
-              </article>
+            ) : (
+              <>
+                <StorageTable report={deep} maxStorage={maxStorage} />
+                <Finding report={deep} cleanup={cleanup} onCleanup={() => setConfirmOpen(true)} />
+              </>
             )}
           </section>
 
-          <aside className="side-column">
-            <article className="panel summary-panel">
-              <p className="eyebrow">RESUMO DA SESSÃO</p>
-              <SummaryRow label="Aparelho" value={device?.connected ? "Identificado" : "Pendente"} state={device ? "ok" : "idle"} />
-              <SummaryRow label="Bateria" value={device?.battery?.healthPercent !== undefined ? `${device.battery.healthPercent.toFixed(1)}% estimados` : "Não lida"} state={device?.battery ? "warn" : "idle"} />
-              <SummaryRow label="Análise profunda" value={deep ? formatBytes(deep.discardedCache.bytes) : "Pendente"} state={deep ? (deep.discardedCache.status === "clear" ? "ok" : "warn") : "idle"} />
-              <SummaryRow label="Alterações" value={cleanup ? "1 registrada" : "Nenhuma"} state={cleanup ? "ok" : "idle"} />
-              <button className="report-button" disabled={!device} onClick={exportReport}>Exportar relatório JSON</button>
-              <small className="privacy-note">O relatório omite nome, UDID, número de série, conta Apple e senhas.</small>
-              {reportMessage && <div className="report-message">✓ {reportMessage}</div>}
-            </article>
-
-            <article className="panel safety-panel">
-              <span className="shield">✓</span>
-              <div><h3>Escopo conservador</h3><p>O aplicativo não oferece explorador de arquivos nem terminal livre. As rotinas remotas são fixas, revisáveis e limitadas ao diagnóstico publicado.</p></div>
-            </article>
-
-            {cleanup && (
-              <article className="panel result-panel">
-                <p className="eyebrow">ÚLTIMA ALTERAÇÃO</p>
-                <h3>{cleanup.message}</h3>
-                <dl><div><dt>Antes</dt><dd>{formatBytes(cleanup.beforeBytes)}</dd></div><div><dt>Depois</dt><dd>{formatBytes(cleanup.afterBytes)}</dd></div><div><dt>Livre</dt><dd>{formatBytes(cleanup.filesystemFreeBytes)}</dd></div></dl>
-              </article>
-            )}
-          </aside>
-        </div>
-      </main>
+          <section className="workspace-section" id="review">
+            <SectionHeader number="4" title="Relatório" description="Gere um registro técnico sem identificadores pessoais." status={reportMessage ? "Exportado" : "Disponível"} ok={Boolean(reportMessage)} />
+            <div className="report-row">
+              <div><strong>Relatório JSON da sessão</strong><p>Não inclui nome, UDID, número de série, conta Apple ou senhas.</p></div>
+              <button className="button primary-button" disabled={!device} onClick={exportReport}>Exportar relatório</button>
+            </div>
+            {reportMessage && <div className="report-result">{reportMessage}</div>}
+            {cleanup && <div className="cleanup-result"><strong>{cleanup.message}</strong><dl><Metric label="Antes" value={formatBytes(cleanup.beforeBytes)} /><Metric label="Depois" value={formatBytes(cleanup.afterBytes)} /><Metric label="Espaço livre" value={formatBytes(cleanup.filesystemFreeBytes)} /></dl></div>}
+          </section>
+        </main>
+      </div>
 
       {sshOpen && (
-        <Modal title="Acesso profundo pelo cabo" onClose={() => { setSshOpen(false); setPassword(""); }}>
+        <Modal title="Configurar leitura profunda" label="Conexão segura" onClose={() => { setSshOpen(false); setPassword(""); }}>
           <form onSubmit={handleDeepScan}>
-            <p>A senha é usada somente em memória para esta leitura e é apagada do formulário ao terminar.</p>
+            <p>A senha permanece somente na memória durante a leitura e é removida ao terminar.</p>
             <label>Usuário<input value="mobile" disabled /></label>
             <label>Senha temporária<input autoFocus type="password" autoComplete="off" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Senha do usuário mobile" /></label>
-            <div className="modal-note"><b>Antes de continuar:</b> confirme que o OpenSSH está ativo no aparelho e que o computador está autorizado.</div>
-            <div className="modal-actions"><button type="button" className="quiet-button" onClick={() => setSshOpen(false)}>Cancelar</button><button className="primary-button" disabled={Boolean(busy)}>Iniciar leitura</button></div>
+            <div className="modal-note"><strong>Antes de continuar</strong><span>Confirme que o OpenSSH está ativo e que este computador foi autorizado.</span></div>
+            <div className="modal-actions"><button type="button" className="button text-button" onClick={() => setSshOpen(false)}>Cancelar</button><button className="button primary-button" disabled={Boolean(busy)}>Iniciar leitura</button></div>
           </form>
         </Modal>
       )}
 
       {confirmOpen && deep && (
-        <Modal title="Autorização de limpeza" onClose={() => { setConfirmOpen(false); setPassword(""); setConfirmation(""); }} danger>
+        <Modal title="Autorizar limpeza" label="Operação destrutiva" onClose={() => { setConfirmOpen(false); setPassword(""); setConfirmation(""); }} danger>
           <form onSubmit={handleCleanup}>
             <div className="target-review"><span>Alvo validado</span><strong>{formatBytes(deep.discardedCache.bytes)}</strong><code>{deep.discardedCache.path}</code></div>
-            <p>O aplicativo medirá e validará novamente o conteúdo. Se houver outro tipo de cache ou estrutura inesperada, a operação será recusada.</p>
+            <p>O conteúdo será medido e validado novamente. Se a estrutura tiver mudado, a operação será recusada.</p>
             <label>Digite exatamente <b>APAGAR CACHES DESCARTADOS</b><input autoFocus value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></label>
             <label>Senha temporária do usuário mobile<input type="password" autoComplete="off" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
-            <div className="modal-actions"><button type="button" className="quiet-button" onClick={() => setConfirmOpen(false)}>Voltar</button><button className="danger-button" disabled={confirmation !== "APAGAR CACHES DESCARTADOS" || Boolean(busy)}>Executar limpeza restrita</button></div>
+            <div className="modal-actions"><button type="button" className="button text-button" onClick={() => setConfirmOpen(false)}>Voltar</button><button className="button danger-button" disabled={confirmation !== "APAGAR CACHES DESCARTADOS" || Boolean(busy)}>Executar limpeza</button></div>
           </form>
         </Modal>
       )}
@@ -324,38 +243,50 @@ function App() {
   );
 }
 
-function StatusPill({ ok, label }: { ok: boolean; label: string }) {
-  return <span className={`status-pill ${ok ? "ok" : "idle"}`}><i />{label}</span>;
+function NavItem({ number, label, shortLabel, state, disabled, onClick }: { number: string; label: string; shortLabel: string; state: "active" | "done" | "idle"; disabled?: boolean; onClick: () => void }) {
+  return <button className={`nav-item ${state}`} disabled={disabled} onClick={onClick}><span>{state === "done" ? "✓" : number}</span><strong><span className="nav-label-full">{label}</span><span className="nav-label-short">{shortLabel}</span></strong></button>;
 }
 
-function DeviceCard({ device }: { device: DeviceSnapshot }) {
+function SectionHeader({ number, title, description, status, ok }: { number: string; title: string; description: string; status: string; ok: boolean }) {
+  return <header className="section-header"><span className="section-number">{number}</span><div><h2>{title}</h2><p>{description}</p></div><span className={`status ${ok ? "ok" : "idle"}`}><i />{status}</span></header>;
+}
+
+function ConnectionEmpty({ onScan, busy }: { onScan: () => void; busy: boolean }) {
+  return <div className="connection-empty"><div className="connection-copy"><strong>Prepare o iPhone</strong><ol><li>Conecte com um cabo de dados.</li><li>Desbloqueie o aparelho.</li><li>Toque em <b>Confiar</b> quando solicitado.</li></ol></div><button className="button primary-button" disabled={busy} onClick={onScan}>Detectar aparelho</button></div>;
+}
+
+function ConnectedSummary({ device, onScan, busy }: { device: DeviceSnapshot; onScan: () => void; busy: boolean }) {
+  return <div className="connected-summary"><div className="phone-symbol" aria-hidden="true"><i /></div><div><strong>{device.name ?? "iPhone"}</strong><span>{device.productType ?? "Modelo não identificado"} · iOS {device.iosVersion ?? "—"}</span></div><button className="button text-button" disabled={busy} onClick={onScan}>Ler novamente</button></div>;
+}
+
+function DeviceOverview({ device }: { device: DeviceSnapshot }) {
   const battery = device.battery;
-  return <div className="device-card">
-    <div className="device-icon"><span /></div>
-    <div className="device-title"><span>{device.source === "demo" ? "DEMONSTRAÇÃO" : "APARELHO AUTORIZADO"}</span><h3>{device.name ?? "iPhone"}</h3><p>{device.productType ?? "Modelo não identificado"} · iOS {device.iosVersion ?? "—"} · build {device.buildVersion ?? "—"}</p></div>
-    <div className="device-metrics">
-      <div><span>Saúde estimada</span><strong>{battery?.healthPercent !== undefined ? `${battery.healthPercent.toFixed(1)}%` : "—"}</strong></div>
-      <div><span>Ciclos</span><strong>{battery?.cycleCount ?? "—"}</strong></div>
-      <div><span>Temperatura</span><strong>{formatTemperature(battery?.temperatureC)}</strong></div>
-    </div>
-  </div>;
+  return <div className="device-overview"><div className="device-identification"><span>{device.source === "demo" ? "Dados de demonstração" : "Aparelho autorizado"}</span><strong>{device.name ?? "iPhone"}</strong><small>{device.productType ?? "Modelo não identificado"} · iOS {device.iosVersion ?? "—"} · build {device.buildVersion ?? "—"}</small></div><dl className="metric-grid"><Metric label="Saúde estimada" value={battery?.healthPercent !== undefined ? `${battery.healthPercent.toFixed(1)}%` : "—"} /><Metric label="Ciclos" value={`${battery?.cycleCount ?? "—"}`} /><Metric label="Temperatura" value={formatTemperature(battery?.temperatureC)} /></dl></div>;
 }
 
-function DeepResults({ report, maxStorage }: { report: DeepScanReport; maxStorage: number }) {
-  return <div className="deep-results">
-    <div className="scan-meta"><span>Leitura {report.source === "demo" ? "demonstrativa" : "local"}</span><small>{formatDate(report.scannedAt)} · {formatBytes(report.filesystemFreeBytes)} livres</small></div>
-    <div className="storage-bars">
-      {report.storage.map((entry) => <div className="storage-row" key={entry.path}><div><span>{entry.label}</span><b>{formatBytes(entry.bytes)}</b></div><div className="bar"><i style={{ width: `${Math.max(3, entry.bytes / maxStorage * 100)}%` }} /></div><code>{entry.path}</code></div>)}
-    </div>
-  </div>;
+function Metric({ label, value }: { label: string; value: string }) {
+  return <div><dt>{label}</dt><dd>{value}</dd></div>;
 }
 
-function SummaryRow({ label, value, state }: { label: string; value: string; state: "ok" | "warn" | "idle" }) {
-  return <div className="summary-row"><span className={`summary-dot ${state}`} /><div><small>{label}</small><strong>{value}</strong></div></div>;
+function Requirements({ platform }: { platform: PlatformStatus }) {
+  return <details className="requirements"><summary>Componentes do computador</summary><div className="requirement-list">{platform.tools.map((tool) => <div className="requirement" key={tool.id}><span className={tool.available ? "available" : "missing"}>{tool.available ? "✓" : "!"}</span><div><strong>{tool.label}</strong><small>{tool.detail}</small></div></div>)}</div><p>{platform.driverHint}</p></details>;
 }
 
-function Modal({ title, children, onClose, danger = false }: React.PropsWithChildren<{ title: string; onClose: () => void; danger?: boolean }>) {
-  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section className={`modal ${danger ? "danger" : ""}`} role="dialog" aria-modal="true"><header><div><span className="modal-kicker">{danger ? "OPERAÇÃO DESTRUTIVA" : "CONEXÃO SEGURA"}</span><h2>{title}</h2></div><button onClick={onClose} aria-label="Fechar">×</button></header>{children}</section></div>;
+function StorageTable({ report, maxStorage }: { report: DeepScanReport; maxStorage: number }) {
+  return <div className="storage-table"><div className="storage-meta"><span>Leitura {report.source === "demo" ? "demonstrativa" : "local"}</span><span>{formatDate(report.scannedAt)} · {formatBytes(report.filesystemFreeBytes)} livres</span></div>{report.storage.map((entry) => <div className="storage-entry" key={entry.path}><div><strong>{entry.label}</strong><code>{entry.path}</code></div><div className="usage"><span><i style={{ width: `${Math.max(3, entry.bytes / maxStorage * 100)}%` }} /></span><b>{formatBytes(entry.bytes)}</b></div></div>)}</div>;
+}
+
+function Finding({ report, cleanup, onCleanup }: { report: DeepScanReport; cleanup?: CleanupResult; onCleanup: () => void }) {
+  const finding = report.discardedCache;
+  return <div className={`finding-row ${finding.status}`}><div className="finding-content"><div className="finding-heading"><strong>Cache de descarte do iOS</strong><span>{severityLabel(finding.status)}</span></div><div className="finding-value"><b>{formatBytes(finding.bytes)}</b><span>{finding.directoryCount} conjuntos descartados</span></div><p>{finding.reason}</p><details><summary>Ver evidências técnicas</summary><code>{finding.path}</code>{Object.entries(finding.identifiers).map(([name, count]) => <div className="identifier" key={name}><span>{name}</span><b>{count}×</b></div>)}</details></div><div className="finding-action"><small>A limpeza é revalidada antes de executar.</small><button className="button danger-button" disabled={!finding.cleanupEligible || Boolean(cleanup)} onClick={onCleanup}>{cleanup ? "Limpeza registrada" : "Revisar limpeza"}</button></div></div>;
+}
+
+function EmptyRow({ children }: React.PropsWithChildren) {
+  return <div className="empty-row">{children}</div>;
+}
+
+function Modal({ title, label, children, onClose, danger = false }: React.PropsWithChildren<{ title: string; label: string; onClose: () => void; danger?: boolean }>) {
+  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section className={`modal ${danger ? "danger" : ""}`} role="dialog" aria-modal="true"><header><div><span>{label}</span><h2>{title}</h2></div><button onClick={onClose} aria-label="Fechar">×</button></header>{children}</section></div>;
 }
 
 export default App;
