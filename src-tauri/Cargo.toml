@@ -1,6 +1,6 @@
 [package]
 name = "ios-storage-forensics"
-version = "0.1.0"
+version = "0.2.0"
 description = "Diagnóstico local e conservador de armazenamento em dispositivos iOS"
 authors = ["neto7z"]
 edition = "2024"

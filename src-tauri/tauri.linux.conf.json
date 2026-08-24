@@ -1,0 +1,15 @@
+{
+  "bundle": {
+    "targets": ["deb", "appimage"],
+    "resources": [],
+    "linux": {
+      "deb": {
+        "depends": [
+          "libimobiledevice-utils",
+          "libusbmuxd-tools",
+          "usbmuxd"
+        ]
+      }
+    }
+  }
+}

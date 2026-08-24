@@ -117,7 +117,7 @@ function App() {
     const report: TechnicianReport = {
       schema: "ios-storage-forensics-report/v1",
       generatedAt: new Date().toISOString(),
-      appVersion: "0.1.0",
+      appVersion: "0.2.0",
       device: safeDevice,
       deepScan: deep,
       cleanup,
@@ -152,7 +152,7 @@ function App() {
           <div><strong>iOS Storage Forensics</strong><small>Ferramenta de diagnóstico local</small></div>
         </div>
         <div className="appbar-actions">
-          <span className={`environment ${isDesktop() ? "local" : "preview"}`}><i />{isDesktop() ? "Aplicativo local" : "Prévia web"}</span>
+          <span className={`environment ${isDesktop() ? "local" : "preview"}`}><i />{isDesktop() ? `${platform?.os === "linux" ? "Linux" : platform?.os === "windows" ? "Windows" : "Aplicativo"} local` : "Prévia web"}</span>
           <button className="button text-button" onClick={handleDemo}>Carregar exemplo</button>
         </div>
       </header>

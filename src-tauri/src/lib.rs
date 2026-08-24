@@ -128,6 +128,46 @@ fn executable_names(base: &str) -> Vec<String> {
     }
 }
 
+fn resource_platform_directory() -> &'static str {
+    if cfg!(windows) {
+        "windows"
+    } else if cfg!(target_os = "linux") {
+        "linux"
+    } else {
+        env::consts::OS
+    }
+}
+
+fn platform_driver_hint() -> &'static str {
+    if cfg!(windows) {
+        "Se o aparelho não aparecer, instale ou repare o Apple Devices e autorize este computador no iPhone."
+    } else if cfg!(target_os = "linux") {
+        "No Debian, Ubuntu ou Kali, instale libimobiledevice-utils, libusbmuxd-tools e usbmuxd. Depois desbloqueie o iPhone e autorize este computador."
+    } else {
+        "Instale libimobiledevice e usbmuxd pelos pacotes da sua plataforma e autorize este computador no iPhone."
+    }
+}
+
+fn missing_ideviceinfo_message() -> &'static str {
+    if cfg!(windows) {
+        "A ferramenta ideviceinfo não foi encontrada. Instale ou repare o Apple Devices e reinstale o aplicativo."
+    } else if cfg!(target_os = "linux") {
+        "A ferramenta ideviceinfo não foi encontrada. Instale o pacote libimobiledevice-utils da sua distribuição."
+    } else {
+        "A ferramenta ideviceinfo não foi encontrada. Instale libimobiledevice para continuar."
+    }
+}
+
+fn missing_iproxy_message() -> &'static str {
+    if cfg!(windows) {
+        "iproxy não foi encontrado. Reinstale o aplicativo para restaurar as ferramentas USB incorporadas."
+    } else if cfg!(target_os = "linux") {
+        "iproxy não foi encontrado. Instale o pacote libusbmuxd-tools da sua distribuição."
+    } else {
+        "iproxy não foi encontrado. Instale as ferramentas do libusbmuxd para continuar."
+    }
+}
+
 fn resolve_tool(app: &AppHandle, base: &str) -> Option<PathBuf> {
     if let Ok(directory) = env::var("IOS_FORENSICS_BIN_DIR") {
         for name in executable_names(base) {
@@ -140,19 +180,34 @@ fn resolve_tool(app: &AppHandle, base: &str) -> Option<PathBuf> {
 
     if let Ok(resource) = app.path().resource_dir() {
         for name in executable_names(base) {
-            let candidate = resource.join("bin").join("windows").join(&name);
+            let candidate = resource
+                .join("bin")
+                .join(resource_platform_directory())
+                .join(&name);
             if candidate.is_file() {
                 return Some(candidate);
             }
         }
     }
 
-    let path = env::var_os("PATH")?;
-    for directory in env::split_paths(&path) {
-        for name in executable_names(base) {
-            let candidate = directory.join(name);
-            if candidate.is_file() {
-                return Some(candidate);
+    if let Some(path) = env::var_os("PATH") {
+        for directory in env::split_paths(&path) {
+            for name in executable_names(base) {
+                let candidate = directory.join(name);
+                if candidate.is_file() {
+                    return Some(candidate);
+                }
+            }
+        }
+    }
+
+    if cfg!(target_os = "linux") {
+        for directory in ["/usr/bin", "/usr/sbin", "/usr/local/bin", "/usr/local/sbin"] {
+            for name in executable_names(base) {
+                let candidate = Path::new(directory).join(name);
+                if candidate.is_file() {
+                    return Some(candidate);
+                }
             }
         }
     }
@@ -227,6 +282,11 @@ fn platform_status(app: AppHandle) -> PlatformStatus {
                 .into(),
             },
         );
+    } else if cfg!(target_os = "linux") {
+        tools.insert(
+            0,
+            tool_status(&app, "usbmuxd", "Suporte USB do Linux", "usbmuxd"),
+        );
     }
 
     PlatformStatus {
@@ -234,12 +294,7 @@ fn platform_status(app: AppHandle) -> PlatformStatus {
         arch: env::consts::ARCH.into(),
         is_windows: cfg!(windows),
         tools,
-        driver_hint: if cfg!(windows) {
-            "Se o aparelho não aparecer, instale ou repare o Apple Devices e autorize este computador no iPhone."
-        } else {
-            "No Linux, instale libimobiledevice e usbmuxd. O instalador distribuído pelo projeto terá foco no Windows."
-        }
-        .into(),
+        driver_hint: platform_driver_hint().into(),
     }
 }
 
@@ -319,9 +374,8 @@ fn parse_battery(text: &str) -> Option<BatteryInfo> {
 
 #[tauri::command]
 fn scan_usb_device(app: AppHandle) -> Result<DeviceSnapshot, String> {
-    let info = resolve_tool(&app, "ideviceinfo").ok_or_else(|| {
-        "A ferramenta ideviceinfo não foi encontrada. No Windows, instale o Apple Devices e o pacote de ferramentas indicado pelo aplicativo.".to_string()
-    })?;
+    let info = resolve_tool(&app, "ideviceinfo")
+        .ok_or_else(|| missing_ideviceinfo_message().to_string())?;
 
     let product_type = idevice_value(&info, "ProductType").ok_or_else(|| {
         "Nenhum iPhone autorizado respondeu. Desbloqueie o aparelho, toque em Confiar e verifique o cabo USB.".to_string()
@@ -395,9 +449,7 @@ fn ensure_tunnel(app: &AppHandle, state: &State<'_, TunnelState>) -> Result<(), 
         *guard = None;
     }
 
-    let iproxy = resolve_tool(app, "iproxy").ok_or_else(|| {
-        "iproxy não foi encontrado. Instale as ferramentas USB ou coloque os executáveis aprovados na pasta bin/windows do aplicativo.".to_string()
-    })?;
+    let iproxy = resolve_tool(app, "iproxy").ok_or_else(|| missing_iproxy_message().to_string())?;
     let child = Command::new(iproxy)
         .args([LOCAL_SSH_PORT.to_string(), "22".to_string()])
         .stdin(Stdio::null())
@@ -739,6 +791,15 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn exposes_linux_specific_dependency_guidance() {
+        assert_eq!(resource_platform_directory(), "linux");
+        assert!(platform_driver_hint().contains("libusbmuxd-tools"));
+        assert!(missing_ideviceinfo_message().contains("libimobiledevice-utils"));
+        assert!(missing_iproxy_message().contains("libusbmuxd-tools"));
+    }
 
     #[test]
     fn parses_safe_documented_finding() {

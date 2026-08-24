@@ -1,6 +1,6 @@
 # iOS Storage Forensics
 
-> Agora também é um aplicativo desktop Windows-first para técnicos. A versão
+> Agora também é um aplicativo desktop para técnicos no Windows e Linux. A versão
 > inicial detecta o iPhone por USB, consulta bateria quando o iOS disponibiliza
 > esses dados, executa diagnóstico profundo por SSH autorizado e exporta um
 > relatório sem identificadores pessoais.
@@ -25,10 +25,9 @@ validação imediatamente antes de alterar e recusa qualquer conteúdo diferente
 
 ![Fluxo principal do aplicativo](docs/app-preview.png)
 
-Veja [instalação e limites no Windows](docs/windows.md). O instalador é gerado
-automaticamente pelo GitHub Actions; até a primeira versão pública, também é
-possível abrir a execução mais recente e baixar o artefato
-`ios-storage-forensics-windows`.
+Veja [instalação e limites no Windows](docs/windows.md) ou
+[instalação no Linux](docs/linux.md). Os pacotes são gerados automaticamente
+pelo GitHub Actions: `.exe` e `.msi` no Windows, `.deb` e `.AppImage` no Linux.
 
 ### Executar a interface para desenvolvimento
 

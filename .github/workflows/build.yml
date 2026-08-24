@@ -19,8 +19,8 @@ jobs:
     name: Interface and unit tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -32,12 +32,17 @@ jobs:
     name: Windows installer
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
 
       - name: Instalar ferramentas iOS de fonte rastreável
         uses: msys2/setup-msys2@v2
@@ -89,14 +94,83 @@ jobs:
             src-tauri/target/release/bundle/nsis/*-setup.exe
           if-no-files-found: error
 
-      - name: Publicar versão marcada
-        if: startsWith(github.ref, 'refs/tags/v')
-        shell: pwsh
+
+  linux:
+    name: Linux packages
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Instalar dependências do Tauri e ferramentas iOS
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libimobiledevice-utils \
+            libusbmuxd-tools \
+            usbmuxd \
+            patchelf \
+            libfuse2
+
+      - name: Verificar ferramentas USB do Linux
+        run: |
+          command -v ideviceinfo
+          command -v idevicediagnostics
+          command -v iproxy
+
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Testar backend Rust no Linux
+        run: cargo test --release --manifest-path src-tauri/Cargo.toml
+      - name: Gerar DEB e AppImage
+        run: npm run tauri build
+
+      - name: Publicar pacotes Linux como artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-storage-forensics-linux-x64
+          path: |
+            src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/appimage/*.AppImage
+          if-no-files-found: error
+
+  release:
+    name: Publish tagged release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ios-storage-forensics-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Publicar todos os instaladores
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $files = @(
-            Get-ChildItem "src-tauri/target/release/bundle/msi/*.msi"
-            Get-ChildItem "src-tauri/target/release/bundle/nsis/*-setup.exe"
-          ) | ForEach-Object { $_.FullName }
-          gh release create $env:GITHUB_REF_NAME $files --generate-notes --title "iOS Storage Forensics $env:GITHUB_REF_NAME"
+          mapfile -t files < <(find release-assets -maxdepth 1 -type f -print | sort)
+          test "${#files[@]}" -ge 4
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$GITHUB_REF_NAME" "${files[@]}" --generate-notes \
+              --title "iOS Storage Forensics $GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY"
+          fi
