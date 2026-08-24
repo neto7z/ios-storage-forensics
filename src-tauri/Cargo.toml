@@ -1,0 +1,22 @@
+[package]
+name = "ios-storage-forensics"
+version = "0.1.0"
+description = "Diagnóstico local e conservador de armazenamento em dispositivos iOS"
+authors = ["neto7z"]
+edition = "2024"
+
+[lib]
+name = "ios_storage_forensics_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.5.6", features = [] }
+
+[dependencies]
+chrono = { version = "0.4", features = ["serde"] }
+plist = "1.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ssh2 = { version = "0.9.6", features = ["vendored-openssl"] }
+tauri = { version = "2.11.5", features = [] }
+zeroize = "1.8"

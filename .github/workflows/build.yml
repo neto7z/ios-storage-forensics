@@ -1,0 +1,98 @@
+name: Build and verify
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  web:
+    name: Interface and unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+
+  windows:
+    name: Windows installer
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar ferramentas iOS de fonte rastreável
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-libimobiledevice
+            mingw-w64-ucrt-x86_64-libusbmuxd
+
+      - name: Preparar ferramentas USB e manifesto
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          destination="$GITHUB_WORKSPACE/src-tauri/resources/bin/windows"
+          mkdir -p "$destination"
+          for program in ideviceinfo.exe idevicediagnostics.exe iproxy.exe; do
+            test -f "/ucrt64/bin/$program"
+            cp "/ucrt64/bin/$program" "$destination/"
+          done
+          for program in "$destination"/*.exe; do
+            ldd "$program" | awk '$3 ~ /^\/ucrt64\/bin\// { print $3 }' | while read -r dependency; do
+              cp -n "$dependency" "$destination/" || true
+            done
+          done
+          {
+            echo "Pacotes MSYS2 usados nesta compilação"
+            pacman -Q mingw-w64-ucrt-x86_64-libimobiledevice mingw-w64-ucrt-x86_64-libusbmuxd
+            echo
+            echo "SHA-256 dos executáveis e bibliotecas incorporados"
+            cd "$destination"
+            sha256sum ./*.exe ./*.dll
+          } > "$destination/toolchain-manifest.txt"
+
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Testar backend Rust
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+      - name: Gerar MSI e instalador EXE
+        run: npm run tauri build
+
+      - name: Publicar instaladores como artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-storage-forensics-windows
+          path: |
+            src-tauri/target/release/bundle/msi/*.msi
+            src-tauri/target/release/bundle/nsis/*-setup.exe
+          if-no-files-found: error
+
+      - name: Publicar versão marcada
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $files = @(
+            Get-ChildItem "src-tauri/target/release/bundle/msi/*.msi"
+            Get-ChildItem "src-tauri/target/release/bundle/nsis/*-setup.exe"
+          ) | ForEach-Object { $_.FullName }
+          gh release create $env:GITHUB_REF_NAME $files --generate-notes --title "iOS Storage Forensics $env:GITHUB_REF_NAME"

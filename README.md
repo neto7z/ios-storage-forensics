@@ -1,5 +1,53 @@
 # iOS Storage Forensics
 
+> Agora também é um aplicativo desktop Windows-first para técnicos. A versão
+> inicial detecta o iPhone por USB, consulta bateria quando o iOS disponibiliza
+> esses dados, executa diagnóstico profundo por SSH autorizado e exporta um
+> relatório sem identificadores pessoais.
+
+## Aplicativo para técnicos
+
+Eu transformei o procedimento documentado neste repositório em uma estação de
+atendimento simples:
+
+1. conecto e autorizo o iPhone;
+2. identifico versão, modelo técnico e condição estimada da bateria;
+3. se o aparelho tiver jailbreak e OpenSSH, inicio uma leitura profunda somente
+   pelo cabo;
+4. reviso o achado antes de qualquer alteração;
+5. quando o caso corresponde exatamente ao cache conhecido, autorizo a limpeza
+   com uma frase explícita;
+6. exporto um relatório JSON anonimizado.
+
+O aplicativo não oferece terminal remoto nem explorador de arquivos. A rotina
+de exclusão tem caminho e estrutura esperada codificados no backend, refaz a
+validação imediatamente antes de alterar e recusa qualquer conteúdo diferente.
+
+![Fluxo principal do aplicativo](docs/app-preview.png)
+
+Veja [instalação e limites no Windows](docs/windows.md). O instalador é gerado
+automaticamente pelo GitHub Actions; até a primeira versão pública, também é
+possível abrir a execução mais recente e baixar o artefato
+`ios-storage-forensics-windows`.
+
+### Executar a interface para desenvolvimento
+
+```sh
+npm ci
+npm run dev
+```
+
+No navegador, o aplicativo abre uma demonstração local e não acessa aparelho
+algum. Para executar o desktop completo:
+
+```sh
+npm run tauri dev
+```
+
+O código usa React e TypeScript na interface e Rust com Tauri no backend. Os
+scripts originais continuam abaixo porque são uma referência pequena e fácil de
+auditar.
+
 Neste repositório eu documento como investiguei um crescimento anormal de
 **Dados do Sistema** no meu iPhone usando Linux, conexão USB e acesso SSH
 autorizado por mim.
