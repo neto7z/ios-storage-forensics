@@ -68,10 +68,11 @@ export type CleanupResult = {
 };
 
 export type TechnicianReport = {
-  schema: "ios-storage-forensics-report/v1";
+  schema: "ios-storage-forensics-report/v2";
   generatedAt: string;
   appVersion: string;
   device: Omit<DeviceSnapshot, "name">;
+  accessCompatibility?: import("./compatibility").AccessCompatibility;
   deepScan?: DeepScanReport;
   cleanup?: CleanupResult;
   privacy: string;

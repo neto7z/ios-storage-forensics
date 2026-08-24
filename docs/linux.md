@@ -37,7 +37,7 @@ command -v iproxy
 ## Instalar o pacote DEB
 
 ```sh
-sudo apt install ./ios-storage-forensics_0.2.0_amd64.deb
+sudo apt install ./iOS.Storage.Forensics_0.3.0_amd64.deb
 ```
 
 O nome exato inclui a versão e pode mudar. Depois, procure por
@@ -46,8 +46,8 @@ O nome exato inclui a versão e pode mudar. Depois, procure por
 ## Executar o AppImage
 
 ```sh
-chmod +x iOS.Storage.Forensics_0.2.0_amd64.AppImage
-./iOS.Storage.Forensics_0.2.0_amd64.AppImage
+chmod +x iOS.Storage.Forensics_0.3.0_amd64.AppImage
+./iOS.Storage.Forensics_0.3.0_amd64.AppImage
 ```
 
 Se a distribuição não tiver `libimobiledevice`, `usbmuxd` e `iproxy`, o

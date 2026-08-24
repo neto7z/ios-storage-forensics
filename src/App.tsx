@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { cleanupDiscardedCache, isDesktop, platformStatus, saveReport, scanDeep, scanUsbDevice } from "./backend";
+import { assessCompatibility } from "./compatibility";
 import { demoDeepScan, demoDevice, demoPlatform } from "./demo";
 import { formatBytes, formatDate, formatTemperature, severityLabel } from "./format";
+import type { AccessCompatibility } from "./compatibility";
 import type { CleanupResult, DeepScanReport, DeviceSnapshot, PlatformStatus, TechnicianReport } from "./types";
 
 type Phase = "connect" | "device" | "deep" | "review";
@@ -20,6 +22,7 @@ function App() {
   const [busy, setBusy] = useState<string>();
   const [error, setError] = useState<string>();
   const [sshOpen, setSshOpen] = useState(false);
+  const [preparationOpen, setPreparationOpen] = useState(false);
   const [password, setPassword] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmation, setConfirmation] = useState("");
@@ -30,6 +33,7 @@ function App() {
   }, []);
 
   const maxStorage = useMemo(() => Math.max(...(deep?.storage.map((item) => item.bytes) ?? [1])), [deep]);
+  const compatibility = useMemo(() => device ? assessCompatibility(device) : undefined, [device]);
 
   function jumpTo(next: Phase) {
     setPhase(next);
@@ -43,6 +47,9 @@ function App() {
     try {
       const result = await scanUsbDevice();
       setDevice(result);
+      setDeep(undefined);
+      setCleanup(undefined);
+      setReportMessage(undefined);
       setPhase("device");
       requestAnimationFrame(() => document.getElementById("device")?.scrollIntoView({ behavior: "smooth" }));
     } catch (value) {
@@ -115,10 +122,11 @@ function App() {
     if (!device) return;
     const { name: _privateName, ...safeDevice } = device;
     const report: TechnicianReport = {
-      schema: "ios-storage-forensics-report/v1",
+      schema: "ios-storage-forensics-report/v2",
       generatedAt: new Date().toISOString(),
-      appVersion: "0.2.0",
+      appVersion: "0.3.0",
       device: safeDevice,
+      accessCompatibility: compatibility,
       deepScan: deep,
       cleanup,
       privacy: "Nome, UDID, serial, conta Apple e credenciais não são incluídos.",
@@ -186,15 +194,16 @@ function App() {
 
           <section className="workspace-section" id="device">
             <SectionHeader number="2" title="Aparelho" description="Informações coletadas pela leitura USB padrão." status={device ? "Identificado" : "Pendente"} ok={Boolean(device)} />
-            {device ? <DeviceOverview device={device} /> : <EmptyRow>Conclua a conexão para identificar o aparelho.</EmptyRow>}
+            {device ? <DeviceOverview device={device} compatibility={compatibility} /> : <EmptyRow>Conclua a conexão para identificar o aparelho.</EmptyRow>}
           </section>
 
           <section className="workspace-section" id="deep">
-            <SectionHeader number="3" title="Armazenamento" description="A leitura profunda mede os diretórios sem alterar arquivos." status={deep ? "Analisado" : "Pendente"} ok={Boolean(deep)} />
+            <SectionHeader number="3" title="Armazenamento" description="A leitura profunda mede os diretórios sem alterar arquivos." status={deep ? "Analisado" : compatibility?.advancedStatus === "supported" ? "Compatível" : device ? "Modo básico" : "Pendente"} ok={Boolean(deep) || compatibility?.advancedStatus === "supported"} />
+            {compatibility && <CompatibilityPanel compatibility={compatibility} device={device} onPrepare={() => setPreparationOpen(true)} />}
             {!deep ? (
               <div className="action-row">
-                <div><strong>Leitura avançada pelo cabo</strong><p>Requer jailbreak rootless, OpenSSH ativo e a senha temporária do usuário <code>mobile</code>.</p></div>
-                <button className="button secondary-button" disabled={!device || Boolean(busy)} onClick={() => setSshOpen(true)}>Configurar acesso</button>
+                <div><strong>Usar acesso avançado existente</strong><p>Se o aparelho já possui jailbreak e OpenSSH, a leitura pode continuar pelo cabo.</p></div>
+                <button className="button secondary-button" disabled={!device || Boolean(busy)} onClick={() => setSshOpen(true)}>Conectar por SSH</button>
               </div>
             ) : (
               <>
@@ -225,6 +234,36 @@ function App() {
             <div className="modal-note"><strong>Antes de continuar</strong><span>Confirme que o OpenSSH está ativo e que este computador foi autorizado.</span></div>
             <div className="modal-actions"><button type="button" className="button text-button" onClick={() => setSshOpen(false)}>Cancelar</button><button className="button primary-button" disabled={Boolean(busy)}>Iniciar leitura</button></div>
           </form>
+        </Modal>
+      )}
+
+      {preparationOpen && compatibility && device && (
+        <Modal title="Preparar acesso avançado" label="Compatibilidade do aparelho" onClose={() => setPreparationOpen(false)}>
+          <div className="preparation-content">
+            <div className={`compatibility-summary ${compatibility.advancedStatus}`}>
+              <span>{device.productType ?? "Modelo não identificado"} · {compatibility.chip ?? "chip não identificado"} · iOS {device.iosVersion ?? "—"}</span>
+              <strong>{compatibility.summary}</strong>
+              <p>{compatibility.detail}</p>
+            </div>
+            {compatibility.methods.length > 0 ? (
+              <div className="method-list">
+                {compatibility.methods.map((method) => (
+                  <article key={method.id}>
+                    <div><strong>{method.name}</strong><span>Projeto oficial</span></div>
+                    <p>{method.note}</p>
+                    <a href={method.officialUrl} target="_blank" rel="noreferrer">Abrir página oficial</a>
+                  </article>
+                ))}
+              </div>
+            ) : <div className="modal-note"><strong>Sem instalação automática</strong><span>O aplicativo não executará um exploit desconhecido nem tentará forçar uma combinação não suportada.</span></div>}
+            <ol className="preparation-steps">
+              <li>Faça backup do aparelho antes de qualquer modificação.</li>
+              <li>Use somente o projeto oficial indicado para a combinação detectada.</li>
+              <li>Confirme a ativação no próprio iPhone e instale o OpenSSH.</li>
+              <li>Volte ao aplicativo e conecte usando uma senha temporária.</li>
+            </ol>
+            <div className="modal-actions"><button type="button" className="button text-button" onClick={() => setPreparationOpen(false)}>Fechar</button><button type="button" className="button primary-button" onClick={() => { setPreparationOpen(false); setSshOpen(true); }}>O aparelho já está preparado</button></div>
+          </div>
         </Modal>
       )}
 
@@ -259,9 +298,14 @@ function ConnectedSummary({ device, onScan, busy }: { device: DeviceSnapshot; on
   return <div className="connected-summary"><div className="phone-symbol" aria-hidden="true"><i /></div><div><strong>{device.name ?? "iPhone"}</strong><span>{device.productType ?? "Modelo não identificado"} · iOS {device.iosVersion ?? "—"}</span></div><button className="button text-button" disabled={busy} onClick={onScan}>Ler novamente</button></div>;
 }
 
-function DeviceOverview({ device }: { device: DeviceSnapshot }) {
+function DeviceOverview({ device, compatibility }: { device: DeviceSnapshot; compatibility?: AccessCompatibility }) {
   const battery = device.battery;
-  return <div className="device-overview"><div className="device-identification"><span>{device.source === "demo" ? "Dados de demonstração" : "Aparelho autorizado"}</span><strong>{device.name ?? "iPhone"}</strong><small>{device.productType ?? "Modelo não identificado"} · iOS {device.iosVersion ?? "—"} · build {device.buildVersion ?? "—"}</small></div><dl className="metric-grid"><Metric label="Saúde estimada" value={battery?.healthPercent !== undefined ? `${battery.healthPercent.toFixed(1)}%` : "—"} /><Metric label="Ciclos" value={`${battery?.cycleCount ?? "—"}`} /><Metric label="Temperatura" value={formatTemperature(battery?.temperatureC)} /></dl></div>;
+  return <div className="device-overview"><div className="device-identification"><span>{device.source === "demo" ? "Dados de demonstração" : "Aparelho autorizado"}</span><strong>{device.name ?? "iPhone"}</strong><small>{device.productType ?? "Modelo não identificado"} · {compatibility?.chip ?? "chip não identificado"} · iOS {device.iosVersion ?? "—"} · build {device.buildVersion ?? "—"}</small></div><dl className="metric-grid"><Metric label="Saúde estimada" value={battery?.healthPercent !== undefined ? `${battery.healthPercent.toFixed(1)}%` : "—"} /><Metric label="Ciclos" value={`${battery?.cycleCount ?? "—"}`} /><Metric label="Temperatura" value={formatTemperature(battery?.temperatureC)} /></dl></div>;
+}
+
+function CompatibilityPanel({ compatibility, device, onPrepare }: { compatibility: AccessCompatibility; device?: DeviceSnapshot; onPrepare: () => void }) {
+  const statusLabel = compatibility.advancedStatus === "supported" ? "Método encontrado" : compatibility.advancedStatus === "unknown" ? "Verificação manual" : "Não disponível";
+  return <div className={`compatibility-panel ${compatibility.advancedStatus}`}><div className="compatibility-icon" aria-hidden="true">{compatibility.advancedStatus === "supported" ? "✓" : compatibility.advancedStatus === "unknown" ? "?" : "—"}</div><div className="compatibility-copy"><span>{statusLabel} · matriz de {compatibility.matrixUpdatedAt}</span><strong>{compatibility.summary}</strong><p>{compatibility.detail}</p>{compatibility.methods.length > 0 && <small>{compatibility.methods.map((method) => method.name).join(" · ")} para {device?.productType ?? "o aparelho detectado"}</small>}</div><button className="button secondary-button" onClick={onPrepare}>{compatibility.advancedStatus === "supported" ? "Como preparar" : "Ver detalhes"}</button></div>;
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
