@@ -25,9 +25,63 @@ validação imediatamente antes de alterar e recusa qualquer conteúdo diferente
 
 ![Fluxo principal do aplicativo](docs/app-preview.png)
 
-Veja [instalação e limites no Windows](docs/windows.md) ou
-[instalação no Linux](docs/linux.md). Os pacotes são gerados automaticamente
-pelo GitHub Actions: `.exe` e `.msi` no Windows, `.deb` e `.AppImage` no Linux.
+## Como instalar o aplicativo
+
+Não é necessário baixar o código-fonte. Os instaladores prontos estão na página
+[Releases do projeto](https://github.com/neto7z/ios-storage-forensics/releases/latest).
+
+### Linux — Kali, Debian ou Ubuntu
+
+Baixe o arquivo `iOS.Storage.Forensics_0.2.0_amd64.deb`. Depois abra um terminal
+na pasta em que ele foi salvo e execute:
+
+```sh
+cd ~/Downloads
+sudo apt install ./iOS.Storage.Forensics_0.2.0_amd64.deb
+```
+
+O `apt` instalará também as dependências declaradas pelo aplicativo. Concluída
+a instalação, procure por **iOS Storage Forensics** no menu de aplicativos.
+
+Para remover futuramente:
+
+```sh
+sudo apt remove i-os-storage-forensics
+```
+
+### Linux — versão portátil AppImage
+
+Se a distribuição não aceitar pacotes `.deb`, baixe
+`iOS.Storage.Forensics_0.2.0_amd64.AppImage`. Na pasta do download, execute:
+
+```sh
+chmod +x iOS.Storage.Forensics_0.2.0_amd64.AppImage
+./iOS.Storage.Forensics_0.2.0_amd64.AppImage
+```
+
+A AppImage não é instalada no sistema: ela abre diretamente. Para que o
+aplicativo consiga conversar com o iPhone, distribuições baseadas em Debian
+precisam destas ferramentas:
+
+```sh
+sudo apt update
+sudo apt install libimobiledevice-utils libusbmuxd-tools usbmuxd
+```
+
+### Windows 10 ou 11
+
+Baixe `iOS.Storage.Forensics_0.2.0_x64-setup.exe` e abra o arquivo com dois
+cliques. Aceite a confirmação do Windows e siga o assistente de instalação. O
+arquivo `.msi` disponível na mesma página é uma alternativa destinada a
+instalação administrativa.
+
+Se o iPhone não for reconhecido, instale o aplicativo **Dispositivos Apple** ou
+o iTunes para disponibilizar os drivers USB da Apple. Consulte também os
+[detalhes e limites no Windows](docs/windows.md) e as
+[informações técnicas do Linux](docs/linux.md).
+
+Os pacotes `.exe`, `.msi`, `.deb` e `.AppImage` são compilados e testados
+automaticamente pelo GitHub Actions a cada versão publicada.
 
 ### Executar a interface para desenvolvimento
 
