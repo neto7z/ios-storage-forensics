@@ -10,6 +10,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   web:
     name: Interface and unit tests
@@ -72,7 +76,7 @@ jobs:
       - run: npm test
       - run: npm run build
       - name: Testar backend Rust
-        run: cargo test --manifest-path src-tauri/Cargo.toml
+        run: cargo test --release --manifest-path src-tauri/Cargo.toml
       - name: Gerar MSI e instalador EXE
         run: npm run tauri build
 
