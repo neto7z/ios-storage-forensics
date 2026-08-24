@@ -1,52 +1,85 @@
 # iOS Storage Forensics
 
-> Agora também é um aplicativo desktop Windows-first para técnicos. A versão
-> inicial detecta o iPhone por USB, consulta bateria quando o iOS disponibiliza
-> esses dados, executa diagnóstico profundo por SSH autorizado e exporta um
-> relatório sem identificadores pessoais.
+Um aplicativo para Windows que ajuda o técnico a descobrir o que está ocupando
+o armazenamento de um iPhone **antes de apagar qualquer coisa**.
 
-## Aplicativo para técnicos
+![Tela principal do aplicativo](docs/app-preview.png)
 
-Eu transformei o procedimento documentado neste repositório em uma estação de
-atendimento simples:
+## Em poucas palavras
 
-1. conecto e autorizo o iPhone;
-2. identifico versão, modelo técnico e condição estimada da bateria;
-3. se o aparelho tiver jailbreak e OpenSSH, inicio uma leitura profunda somente
-   pelo cabo;
-4. reviso o achado antes de qualquer alteração;
-5. quando o caso corresponde exatamente ao cache conhecido, autorizo a limpeza
-   com uma frase explícita;
-6. exporto um relatório JSON anonimizado.
+O programa organiza o atendimento em quatro etapas:
 
-O aplicativo não oferece terminal remoto nem explorador de arquivos. A rotina
-de exclusão tem caminho e estrutura esperada codificados no backend, refaz a
-validação imediatamente antes de alterar e recusa qualquer conteúdo diferente.
+1. **Conexão:** reconhece o iPhone ligado pelo cabo USB;
+2. **Aparelho:** mostra modelo, versão do iOS e os dados de bateria disponíveis;
+3. **Armazenamento:** no modo avançado, mede quais pastas estão ocupando espaço;
+4. **Relatório:** salva um resumo técnico sem nome, serial, UDID ou senha.
 
-![Fluxo principal do aplicativo](docs/app-preview.png)
+Ele foi criado a partir de um caso real em que encontrei aproximadamente **16 GB
+de cache descartado do Google Fotos** no meu próprio iPhone. O aplicativo não
+presume que todos os aparelhos tenham o mesmo problema.
 
-Veja [instalação e limites no Windows](docs/windows.md). O instalador é gerado
-automaticamente pelo GitHub Actions; até a primeira versão pública, também é
-possível abrir a execução mais recente e baixar o artefato
-`ios-storage-forensics-windows`.
+## O que ele não promete
 
-### Executar a interface para desenvolvimento
+- não é um “limpador mágico” de Dados do Sistema;
+- não apaga fotos, conversas ou aplicativos;
+- não acessa as pastas internas de um iPhone comum sem autorização avançada;
+- não executa uma limpeza se o conteúdo encontrado for diferente do caso seguro
+  documentado no código.
+
+Sem jailbreak, ele ainda identifica o aparelho, consulta os dados que o iOS
+permitir e gera o relatório. A medição interna e a limpeza restrita exigem um
+iPhone com jailbreak rootless e OpenSSH temporariamente ativo.
+
+## Como usar no Windows
+
+1. instale o **Apple Devices** no Windows;
+2. abra a página de [downloads](https://github.com/neto7z/ios-storage-forensics/releases/latest)
+   e baixe o arquivo terminado em **`-setup.exe`**;
+3. conecte o iPhone com um cabo de dados e desbloqueie a tela;
+4. toque em **Confiar** no iPhone;
+5. abra o aplicativo e clique em **Detectar aparelho**.
+
+O arquivo `.msi` disponível na mesma página é uma alternativa para técnicos e
+instalações administradas. Para uso comum, prefira o `-setup.exe`.
+
+O projeto ainda não possui certificado comercial. Por isso, o Windows pode
+mostrar “editor desconhecido” mesmo quando o arquivo veio deste repositório.
+Veja os [requisitos, limites e cuidados no Windows](docs/windows.md) antes de
+usar a análise profunda.
+
+## Segurança e privacidade
+
+- o diagnóstico padrão apenas lê informações;
+- nenhuma senha é salva em arquivo ou relatório;
+- o aplicativo não possui terminal livre nem explorador de arquivos;
+- qualquer limpeza exige revisão, frase de confirmação e uma nova validação;
+- o relatório exclui os principais identificadores pessoais do aparelho.
+
+Faça backup antes de autorizar qualquer alteração. Use o programa apenas em
+aparelhos próprios ou com autorização expressa do responsável.
+
+## Para desenvolvedores
+
+Interface de demonstração:
 
 ```sh
 npm ci
 npm run dev
 ```
 
-No navegador, o aplicativo abre uma demonstração local e não acessa aparelho
-algum. Para executar o desktop completo:
+Aplicativo desktop completo:
 
 ```sh
 npm run tauri dev
 ```
 
 O código usa React e TypeScript na interface e Rust com Tauri no backend. Os
-scripts originais continuam abaixo porque são uma referência pequena e fácil de
-auditar.
+scripts de inspeção e limpeza também permanecem públicos para auditoria.
+
+<details>
+<summary><strong>Leia a investigação técnica completa do meu iPhone</strong></summary>
+
+<br>
 
 Neste repositório eu documento como investiguei um crescimento anormal de
 **Dados do Sistema** no meu iPhone usando Linux, conexão USB e acesso SSH
@@ -221,6 +254,8 @@ Após o diagnóstico, eu:
 3. encerrei o `iproxy`;
 4. reiniciei o espaço de usuário;
 5. aguardei o iOS recalcular a tela de armazenamento.
+
+</details>
 
 ## Responsabilidade
 
