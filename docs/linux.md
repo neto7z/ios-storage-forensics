@@ -14,6 +14,11 @@ O `.deb` declara as ferramentas USB como dependências. O AppImage inclui a
 interface e o backend do aplicativo, mas as ferramentas de comunicação com o
 iPhone continuam sendo fornecidas pela distribuição Linux.
 
+O AppImage passa por uma etapa adicional de compatibilidade para evitar o
+conflito entre bibliotecas antigas empacotadas e versões recentes do Mesa e do
+GLib. A inicialização da janela também é testada automaticamente antes da
+publicação.
+
 ## Dependências no Kali, Debian ou Ubuntu
 
 ```sh

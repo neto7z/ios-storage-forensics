@@ -125,7 +125,9 @@ jobs:
             libusbmuxd-tools \
             usbmuxd \
             patchelf \
-            libfuse2
+            libfuse2 \
+            xvfb \
+            xdotool
 
       - name: Verificar ferramentas USB do Linux
         run: |
@@ -140,6 +142,38 @@ jobs:
         run: cargo test --release --manifest-path src-tauri/Cargo.toml
       - name: Gerar DEB e AppImage
         run: npm run tauri build
+
+      - name: Corrigir compatibilidade do AppImage com Mesa recente
+        run: |
+          appimage=$(find src-tauri/target/release/bundle/appimage -maxdepth 1 -type f -name '*.AppImage' -print -quit)
+          plugin=$(find "$HOME/.cache/tauri" -type f -name 'linuxdeploy-plugin-appimage-x86_64.AppImage' -print -quit 2>/dev/null || true)
+          if [ -z "$plugin" ]; then
+            plugin="$RUNNER_TEMP/linuxdeploy-plugin-appimage-x86_64.AppImage"
+            curl --fail --location --retry 3 \
+              --output "$plugin" \
+              'https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage'
+          fi
+          echo 'a45d3e227bc7f397e9cf6bfa4c9507494efa2293357b6e86690a3de2ca992e79' "${plugin}" | sha256sum --check
+          ./scripts/fix-appimage-compatibility.sh "$appimage" "$plugin"
+
+      - name: Testar inicialização gráfica do AppImage
+        run: |
+          appimage=$(find src-tauri/target/release/bundle/appimage -maxdepth 1 -type f -name '*.AppImage' -print -quit)
+          timeout 20 xvfb-run -a bash -c '
+            APPIMAGE_EXTRACT_AND_RUN=1 "$1" &
+            app_pid=$!
+            trap "kill $app_pid 2>/dev/null || true" EXIT
+            for attempt in {1..20}; do
+              if xdotool search --name "^iOS Storage Forensics$" >/dev/null 2>&1; then
+                sleep 2
+                pgrep -f WebKitWebProcess >/dev/null
+                exit 0
+              fi
+              kill -0 "$app_pid" 2>/dev/null || exit 1
+              sleep 0.5
+            done
+            exit 1
+          ' _ "$appimage"
 
       - name: Publicar pacotes Linux como artefato
         uses: actions/upload-artifact@v4
